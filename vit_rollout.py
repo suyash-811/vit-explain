@@ -6,7 +6,11 @@ from torchvision import transforms
 import numpy as np
 import cv2
 
-def rollout(attentions, discard_ratio, head_fusion):
+def rollout(attentions, discard_ratio, head_fusion, num_classes, class_idx, distillation):
+    if distillation:
+        skip_idx = 196 + num_classes*2
+    else:
+        skip_idx = 196 + num_classes
     result = torch.eye(attentions[0].size(-1))
     with torch.no_grad():
         for attention in attentions:
@@ -23,7 +27,12 @@ def rollout(attentions, discard_ratio, head_fusion):
             # don't drop the class token
             flat = attention_heads_fused.view(attention_heads_fused.size(0), -1)
             _, indices = flat.topk(int(flat.size(-1)*discard_ratio), -1, False)
-            indices = indices[indices != 0]
+            avoid = []
+            for i in range(num_classes):
+                for j in range(num_classes):
+                    avoid.append(skip_idx*i + j)
+            avoid = torch.tensor(avoid, dtype=torch.uint8)
+            indices = indices[~torch.isin(indices, avoid)]
             flat[0, indices] = 0
 
             I = torch.eye(attention_heads_fused.size(-1))
@@ -34,19 +43,21 @@ def rollout(attentions, discard_ratio, head_fusion):
     
     # Look at the total attention between the class token,
     # and the image patches
-    mask = result[0, 0 , 1 :]
+    mask = result[0, class_idx , num_classes:]
     # In case of 224x224 image, this brings us from 196 to 14
     width = int(mask.size(-1)**0.5)
     mask = mask.reshape(width, width).numpy()
     mask = mask / np.max(mask)
-    return mask    
+    return mask
 
 class VITAttentionRollout:
-    def __init__(self, model, attention_layer_name='attn_drop', head_fusion="mean",
+    def __init__(self, model,num_classes=4,distillation_token=False, attention_layer_name='attn_drop', head_fusion="mean",
         discard_ratio=0.9):
         self.model = model
         self.head_fusion = head_fusion
         self.discard_ratio = discard_ratio
+        self.num_classes = num_classes
+        self.distillation = distillation_token
         for name, module in self.model.named_modules():
             if attention_layer_name in name:
                 module.register_forward_hook(self.get_attention)
@@ -56,9 +67,9 @@ class VITAttentionRollout:
     def get_attention(self, module, input, output):
         self.attentions.append(output.cpu())
 
-    def __call__(self, input_tensor):
+    def __call__(self, input_tensor, class_idx):
         self.attentions = []
         with torch.no_grad():
             output = self.model(input_tensor)
 
-        return rollout(self.attentions, self.discard_ratio, self.head_fusion)
+        return rollout(self.attentions, self.discard_ratio, self.head_fusion, self.num_classes, class_idx, self.distillation)
