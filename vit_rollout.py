@@ -9,8 +9,10 @@ import cv2
 def rollout(attentions, discard_ratio, head_fusion, num_classes, class_idx, distillation):
     if distillation:
         skip_idx = 196 + num_classes*2
+        mask_idx = num_classes*2
     else:
         skip_idx = 196 + num_classes
+        mask_idx = num_classes
     result = torch.eye(attentions[0].size(-1))
     with torch.no_grad():
         for attention in attentions:
@@ -43,7 +45,7 @@ def rollout(attentions, discard_ratio, head_fusion, num_classes, class_idx, dist
     
     # Look at the total attention between the class token,
     # and the image patches
-    mask = result[0, class_idx , num_classes:]
+    mask = result[0, class_idx , mask_idx:]
     # In case of 224x224 image, this brings us from 196 to 14
     width = int(mask.size(-1)**0.5)
     mask = mask.reshape(width, width).numpy()
@@ -72,4 +74,4 @@ class VITAttentionRollout:
         with torch.no_grad():
             output = self.model(input_tensor)
 
-        return rollout(self.attentions, self.discard_ratio, self.head_fusion, self.num_classes, class_idx, self.distillation)
+        return rollout(self.attentions, self.discard_ratio, self.head_fusion, self.num_classes, class_idx, self.distillation), self.attentions
