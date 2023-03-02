@@ -57,7 +57,7 @@ class VITAttentionGradRollout:
         for name, module in self.model.named_modules():
             if attention_layer_name in name:
                 module.register_forward_hook(self.get_attention)
-                module.register_backward_hook(self.get_attention_gradient)
+                module.register_full_backward_hook(self.get_attention_gradient)
 
         self.attentions = []
         self.attention_gradients = []
