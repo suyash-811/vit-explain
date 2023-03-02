@@ -40,7 +40,6 @@ def rollout(attentions, discard_ratio, head_fusion, num_classes, class_idx, dist
             I = torch.eye(attention_heads_fused.size(-1))
             a = (attention_heads_fused + 1.0*I)/2
             a = a / a.sum(dim=-1)
-
             result = torch.matmul(a, result)
     
     # Look at the total attention between the class token,
