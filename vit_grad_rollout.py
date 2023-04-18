@@ -49,15 +49,16 @@ def grad_rollout(attentions, gradients, discard_ratio, num_classes, class_idx, d
 
 class VITAttentionGradRollout:
     def __init__(self, model, num_classes=4, distillation_token=False, attention_layer_name='attn_drop',
-        discard_ratio=0.9):
+        discard_ratio=0.9, device="cuda"):
         self.model = model
         self.discard_ratio = discard_ratio
         self.num_classes = num_classes
         self.distillation = distillation_token
+        self.device = device
         for name, module in self.model.named_modules():
             if attention_layer_name in name:
                 module.register_forward_hook(self.get_attention)
-                module.register_backward_hook(self.get_attention_gradient)
+                module.register_full_backward_hook(self.get_attention_gradient)
 
         self.attentions = []
         self.attention_gradients = []
@@ -68,10 +69,16 @@ class VITAttentionGradRollout:
     def get_attention_gradient(self, module, grad_input, grad_output):
         self.attention_gradients.append(grad_input[0].cpu())
 
+    def reset_lists(self):
+        self.attentions = []
+        self.attention_gradients = []
+
     def __call__(self, input_tensor, category_index):
+        self.attentions = []
+        self.attention_gradients = []
         self.model.zero_grad()
         output = self.model(input_tensor)
-        category_mask = torch.zeros(output.size())
+        category_mask = torch.zeros(output.size(), device=self.device)
         category_mask[:, category_index] = 1
         loss = (output*category_mask).sum()
         loss.backward()

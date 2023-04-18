@@ -64,6 +64,9 @@ class VITAttentionRollout:
                 module.register_forward_hook(self.get_attention)
 
         self.attentions = []
+    
+    def reset_lists(self):
+        self.attentions = []
 
     def get_attention(self, module, input, output):
         self.attentions.append(output.cpu())
